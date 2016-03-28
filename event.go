@@ -88,6 +88,9 @@ var (
 // The parameter is a channel through which events will be sent.
 func (c *Client) AddEventListener(listener chan<- *APIEvents) error {
 	var err error
+	if len(c.serverAPIVersion) == 0 {
+		c.checkAPIVersion()
+	}
 	if !c.eventMonitor.isEnabled() {
 		err = c.eventMonitor.enableEventMonitoring(c)
 		if err != nil {
@@ -324,7 +327,7 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 			if !c.eventMonitor.isEnabled() {
 				return
 			}
-			transformEvent(&event)
+			c.transformEvent(&event)
 			eventChan <- &event
 		}
 	}(res, conn)
@@ -333,9 +336,13 @@ func (c *Client) eventHijack(startTime int64, eventChan chan *APIEvents, errChan
 
 // transformEvent takes an event and determines what version it is from
 // then populates both versions of the event
-func transformEvent(event *APIEvents) {
+func (c *Client) transformEvent(event *APIEvents) {
+	breakingAPIVersion, err := NewAPIVersion("1.21")
+	if err != nil {
+		return
+	}
 	// if <= 1.21, `status` and `ID` will be populated
-	if event.Status != "" && event.ID != "" {
+	if c.serverAPIVersion.LessThanOrEqualTo(breakingAPIVersion) {
 		event.Action = event.Status
 		event.Actor.ID = event.ID
 		event.Actor.Attributes = map[string]string{}
